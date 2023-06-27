@@ -1,3 +1,28 @@
+"""
+
+
+
+
+
+
+This file is deprecated!!!
+This file is deprecated!!!
+This file is deprecated!!!
+This file is deprecated!!!
+This file is deprecated!!!
+This file is deprecated!!!
+This file is deprecated!!!
+
+
+
+
+
+
+
+"""
+
+
+
 import time
 import datetime
 
@@ -17,30 +42,7 @@ from src.loadfiles import load_pickle
 from src.evaluate import Evaluator
 from src.classification.multilabel import convert_to_one_hot, convert_to_label
 
-"""
-              precision    recall  f1-score   support
-           0       1.00      0.80      0.89         5
-           1       0.68      0.99      0.81       110
-           2       0.00      0.00      0.00         4
-           3       0.00      0.00      0.00         1
-           4       0.00      0.00      0.00         4
-           5       0.00      0.00      0.00         5
-           6       0.00      0.00      0.00         5
-           7       0.65      0.75      0.70        20
-           8       0.00      0.00      0.00         1
-           9       1.00      0.40      0.57        15
-          10       1.00      0.31      0.47        13
-          11       0.00      0.00      0.00         1
-          12       0.00      0.00      0.00         5
-          13       0.00      0.00      0.00        10
-          14       0.00      0.00      0.00         6
-          16       0.00      0.00      0.00         4
-          17       0.39      0.69      0.50        16
-    accuracy                           0.66       225
-   macro avg       0.28      0.23      0.23       225
-weighted avg       0.57      0.66      0.58       225
 
-"""
 num_labels = 18
 name = "guanzhi_sep_vec_each_1350_select"
 df_train = load_pickle(fr'C:\Users\10507\OneDrive\桌面\202301 危险源挖掘论文\不安全事件分类'

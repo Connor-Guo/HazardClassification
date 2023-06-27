@@ -6,7 +6,8 @@ from transformers import BertTokenizer, BertModel
 import torch
 from torch.utils.data import TensorDataset, random_split
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
-from transformers import BertForSequenceClassification, AdamW, BertConfig
+from transformers import (BertForSequenceClassification,
+                          BertForTokenClassification, AdamW, BertConfig)
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -14,42 +15,27 @@ import seaborn as sns
 
 from src.loadfiles import load_pickle
 from src.evaluate import Evaluator
-
-
-"""
-              precision    recall  f1-score   support
-           0       1.00      0.80      0.89         5
-           1       0.68      0.99      0.81       110
-           2       0.00      0.00      0.00         4
-           3       0.00      0.00      0.00         1
-           4       0.00      0.00      0.00         4
-           5       0.00      0.00      0.00         5
-           6       0.00      0.00      0.00         5
-           7       0.65      0.75      0.70        20
-           8       0.00      0.00      0.00         1
-           9       1.00      0.40      0.57        15
-          10       1.00      0.31      0.47        13
-          11       0.00      0.00      0.00         1
-          12       0.00      0.00      0.00         5
-          13       0.00      0.00      0.00        10
-          14       0.00      0.00      0.00         6
-          16       0.00      0.00      0.00         4
-          17       0.39      0.69      0.50        16
-    accuracy                           0.66       225
-   macro avg       0.28      0.23      0.23       225
-weighted avg       0.57      0.66      0.58       225
+from src.classification.multilabel import convert_to_one_hot, convert_to_label
 
 """
+"""
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+num_labels = 18
 EXP_NAME = "guanzhi_bert_2941"
-df = load_pickle(f"./out/dump/{EXP_NAME}.pkl")
+model_name = "guanzhi_bertC_2941_bs16"
 df_train = load_pickle(f"./out/datasets/{EXP_NAME}-train.pkl")
 df_test = load_pickle(f"./out/datasets/{EXP_NAME}-test.pkl")
+
 sentences_train = df_train['后果'].to_list()
 sentences_test = df_test['后果'].to_list()
-labels_train = (df_train['label'] - 1).tolist()
-labels_test = (df_test['label'] - 1).tolist()
+
+# labels_train = (df_train['label'] - 1).tolist()
+# labels_test = (df_test['label'] - 1).tolist()
+labels_train = convert_to_one_hot(df_train[['label', 'label2', 'label3', 'label4', 'label5']].fillna(0).to_numpy().astype(int))
+labels_test = convert_to_one_hot(df_test[['label', 'label2', 'label3', 'label4', 'label5']].fillna(0).to_numpy().astype(int))
+
 
 # 加载 BERT 分词器
 print('Loading BERT tokenizer...')
@@ -143,18 +129,21 @@ validation_dataloader = DataLoader(
 # 加载 BertForSequenceClassification, 预训练 BERT 模型 + 顶层的线性分类层
 model = BertForSequenceClassification.from_pretrained(
     "hfl/chinese-roberta-wwm-ext", # 小写的 12 层预训练模型
-    num_labels=18,  # 分类数 --2 表示二分类
+    num_labels=num_labels,  # 分类数 --2 表示二分类
                     # 你可以改变这个数字，用于多分类任务
+    problem_type="multi_label_classification",  # 问题类型为多标签分类
     output_attentions=False,  # 模型是否返回 attentions weights.
     output_hidden_states=False,  # 模型是否返回所有隐层状态.
     return_dict=False
 )
 
+# 在 gpu 中运行该模型
+model.cuda()
 
 # 优化器 & 学习率调度器
 # 我认为 'W' 代表 '权重衰减修复"
 optimizer = AdamW(model.parameters(),
-                  lr=5e-5, # args.learning_rate - default is 5e-5
+                  lr=2e-5, # args.learning_rate - default is 5e-5
                   eps=1e-8 # args.adam_epsilon  - default is 1e-8
                 )
 
@@ -201,7 +190,7 @@ seed_val = 42
 random.seed(seed_val)
 np.random.seed(seed_val)
 torch.manual_seed(seed_val)
-# torch.cuda.manual_seed_all(seed_val)
+torch.cuda.manual_seed_all(seed_val)
 
 # 存储训练和评估的 loss、准确率、训练时长等统计指标,
 training_stats = []
@@ -238,18 +227,35 @@ for epoch_i in range(0, epochs):
             print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(step, len(train_dataloader), elapsed))
 
         # 准备输入数据，并将其拷贝到 gpu 中
-        # b_input_ids = batch[0].to(device)
-        # b_input_mask = batch[1].to(device)
-        # b_labels = batch[2].to(device)
-        b_input_ids = batch[0]
-        b_input_mask = batch[1]
-        b_labels = batch[2]
+        b_input_ids = batch[0].to(device)
+        b_input_mask = batch[1].to(device)
+        b_labels = batch[2].type(torch.FloatTensor).to(device)
+        # b_input_ids = batch[0]
+        # b_input_mask = batch[1]
+        # b_labels = batch[2].type(torch.FloatTensor)
 
         # 每次计算梯度前，都需要将梯度清 0，因为 pytorch 的梯度是累加的
         model.zero_grad()
 
+        # 官网改的
+        # inputs = {
+        #     'input_ids': b_input_ids,
+        #     'attention_mask': b_input_mask,
+        #     'labels': b_labels
+        # }
+        # with torch.no_grad():
+        #     logits = model(**inputs)[0]
+        #     # logits = model(**inputs).logits
+        # predicted_class_ids = torch.arange(0, logits.shape[-1]).repeat(batch_size, 1)[torch.sigmoid(logits).squeeze(dim=0) > 0.5]
+        #
+        # labels = torch.sum(
+        #     torch.nn.functional.one_hot(predicted_class_ids[None, :].clone(), num_classes=num_labels), dim=1
+        # ).to(torch.float)
+        # loss = model(**inputs, labels=labels).loss
+
         # 前向传播
         # 文档参见:
+        # https://huggingface.co/docs/transformers/model_doc/bert
         # https://huggingface.co/transformers/v2.2.0/model_doc/bert.html#transformers.BertForSequenceClassification
         # 该函数会根据不同的参数，会返回不同的值。 本例中, 会返回 loss 和 logits -- 模型的预测结果
         loss, logits = model(b_input_ids,
@@ -303,12 +309,12 @@ for epoch_i in range(0, epochs):
     # Evaluate data for one epoch
     for batch in validation_dataloader:
         # 将输入数据加载到 gpu 中
-        # b_input_ids = batch[0].to(device)
-        # b_input_mask = batch[1].to(device)
-        # b_labels = batch[2].to(device)
-        b_input_ids = batch[0]
-        b_input_mask = batch[1]
-        b_labels = batch[2]
+        b_input_ids = batch[0].to(device)
+        b_input_mask = batch[1].to(device)
+        b_labels = batch[2].type(torch.FloatTensor).to(device)
+        # b_input_ids = batch[0]
+        # b_input_mask = batch[1]
+        # b_labels = batch[2].type(torch.FloatTensor)
 
         # 评估的时候不需要更新参数、计算梯度
         with torch.no_grad():
@@ -372,7 +378,7 @@ print("Total training took {:} (h:mm:ss)".format(format_time(time.time() - total
 import os
 
 # 模型存储到的路径
-output_dir = './model_save/'
+output_dir = './model_save/guanzhi_bertC_bs16'
 
 # 目录不存在则创建
 if not os.path.exists(output_dir):
@@ -416,7 +422,7 @@ for sent in sentences_test:
 # 将列表转换为 tensor
 input_ids_test = torch.cat(input_ids_test, dim=0)
 attention_masks_test = torch.cat(attention_masks_test, dim=0)
-labels_test = torch.tensor(labels_test)
+labels_test = torch.tensor(labels_test).type(torch.FloatTensor)
 
 # 输出第 1 行文本的原始和编码后的信息
 print('Original: ', sentences_test[0])
@@ -441,7 +447,7 @@ predictions, true_labels = [], []
 # 预测
 for batch in prediction_dataloader:
     # 将数据加载到 gpu 中
-    # batch = tuple(t.to(device) for t in batch)
+    batch = tuple(t.to(device) for t in batch)
     b_input_ids, b_input_mask, b_labels = batch
 
     # 不需要计算梯度
@@ -461,8 +467,30 @@ for batch in prediction_dataloader:
     true_labels.append(label_ids)
 
 print('    DONE.')
-# print('Positive samples: %d of %d (%.2f%%)' % (df.label.sum(), len(df.label), (df.label.sum() / len(df.label) * 100.0)))
 
+# 最终评估
+from torcheval.metrics.functional.classification.accuracy import topk_multilabel_accuracy
+
+
+def evaluate(predictions, true_labels, top_k=5):
+    # 如有需要调整k的值，可以照此思路
+    # 先根据true_labels将结果按标签个数分组
+    # 设标签个数为n_labels，那么top-k accuracy的k可以取n_labels + 1
+    # 输入的是一个包含多个batch数据的列表，这里将其合并为一个矩阵
+
+    flat_predictions = torch.tensor(np.concatenate(predictions, axis=0))  # 还要转换成概率形式
+    flat_true_labels = torch.tensor(np.concatenate(true_labels, axis=0))
+    # 计算模型性能
+    perf = {
+        "contain": topk_multilabel_accuracy(flat_predictions, flat_true_labels, criteria='contain', k=top_k),
+        "overlap": topk_multilabel_accuracy(flat_predictions, flat_true_labels, criteria='overlap', k=top_k),
+        "hamming": topk_multilabel_accuracy(flat_predictions, flat_true_labels, criteria='hamming', k=top_k),
+    }
+    return perf
+
+
+perf = evaluate(predictions, true_labels, 5)
+print("Model performance: {}".format(perf))
 
 # # 最终评测结果会基于全量的测试数据，不过我们可以统计每个小批量各自的分数，以查看批量之间的变化。
 # from sklearn.metrics import matthews_corrcoef
@@ -504,6 +532,5 @@ print('    DONE.')
 # mcc = matthews_corrcoef(flat_true_labels, flat_predictions)
 #
 # print('Total MCC: %.3f' % mcc)
-#
-# np.savetxt()
-#
+
+
