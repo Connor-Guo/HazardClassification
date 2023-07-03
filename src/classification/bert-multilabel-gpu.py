@@ -128,9 +128,9 @@ validation_dataloader = DataLoader(
 
 # 加载 BertForSequenceClassification, 预训练 BERT 模型 + 顶层的线性分类层
 model = BertForSequenceClassification.from_pretrained(
-    "hfl/chinese-roberta-wwm-ext", # 小写的 12 层预训练模型
+    "hfl/chinese-roberta-wwm-ext",  # 小写的 12 层预训练模型
     num_labels=num_labels,  # 分类数 --2 表示二分类
-                    # 你可以改变这个数字，用于多分类任务
+                            # 你可以改变这个数字，用于多分类任务
     problem_type="multi_label_classification",  # 问题类型为多标签分类
     output_attentions=False,  # 模型是否返回 attentions weights.
     output_hidden_states=False,  # 模型是否返回所有隐层状态.
@@ -143,9 +143,9 @@ model.cuda()
 # 优化器 & 学习率调度器
 # 我认为 'W' 代表 '权重衰减修复"
 optimizer = AdamW(model.parameters(),
-                  lr=2e-5, # args.learning_rate - default is 5e-5
-                  eps=1e-8 # args.adam_epsilon  - default is 1e-8
-                )
+                  lr=2e-5,  # args.learning_rate - default is 5e-5
+                  eps=1e-8  # args.adam_epsilon  - default is 1e-8
+                  )
 
 from transformers import get_linear_schedule_with_warmup
 
@@ -157,8 +157,8 @@ total_steps = len(train_dataloader) * epochs
 
 # 创建学习率调度器
 scheduler = get_linear_schedule_with_warmup(optimizer,
-                                            num_warmup_steps = 0,
-                                            num_training_steps = total_steps)
+                                            num_warmup_steps=0,
+                                            num_training_steps=total_steps)
 
 
 # 4.3. 训练循环
@@ -236,22 +236,6 @@ for epoch_i in range(0, epochs):
 
         # 每次计算梯度前，都需要将梯度清 0，因为 pytorch 的梯度是累加的
         model.zero_grad()
-
-        # 官网改的
-        # inputs = {
-        #     'input_ids': b_input_ids,
-        #     'attention_mask': b_input_mask,
-        #     'labels': b_labels
-        # }
-        # with torch.no_grad():
-        #     logits = model(**inputs)[0]
-        #     # logits = model(**inputs).logits
-        # predicted_class_ids = torch.arange(0, logits.shape[-1]).repeat(batch_size, 1)[torch.sigmoid(logits).squeeze(dim=0) > 0.5]
-        #
-        # labels = torch.sum(
-        #     torch.nn.functional.one_hot(predicted_class_ids[None, :].clone(), num_classes=num_labels), dim=1
-        # ).to(torch.float)
-        # loss = model(**inputs, labels=labels).loss
 
         # 前向传播
         # 文档参见:

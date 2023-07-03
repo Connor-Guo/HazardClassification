@@ -54,7 +54,7 @@ from src.similarity import (sim_m2m,
 
 
 EXP_NAME = "guanzhi_sep_vec_each_1350_select"  # 实验名称
-__SAVE__ = True  # 是否保存此次计算的df和术语特征
+__SAVE__ = False  # 是否保存此次计算的df和术语特征
 __LOAD__ = not __SAVE__  # 是否读取预计算的df和术语特征
 __PROCESS__ = __SAVE__  # 是否从头计算df和术语特征（速度较慢）
 
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     # 词向量计算
     if __PROCESS__:
         # （***）读取词向量模型
-        model = load_pretrained("./nlp/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5.bz2")
+        model = load_pretrained("./nlp/models/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5.bz2")
         # （需要模型）计算句子特征向量
         # dict_tfidf = tfidf('./out/corpus_未预训练词拆为单字.txt')  # 用tfidf对词语加权
         df = vectorize.cal_doc_vec_df(df, model,

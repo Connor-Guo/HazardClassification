@@ -60,6 +60,7 @@ tokenizer = BertTokenizer.from_pretrained('hfl/chinese-roberta-wwm-ext')
 # tokenizer = BertTokenizer.from_pretrained("model_save")
 # model = BertModel.from_pretrained("model_save")
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # 确定 MAX_LEN 这个参数
 max_len = 0

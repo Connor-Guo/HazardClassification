@@ -1,4 +1,7 @@
-"""读取文件操作"""
+"""读取文件操作
+
+不要引入src的其他模块
+"""
 import pandas as pd
 from typing import Optional
 from collections import defaultdict
@@ -105,7 +108,7 @@ def load_pretrained(fp: str = None):
 
     # 或者读取模型
     if fp is None:
-        fp = "../nlp/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5.bz2"
+        fp = "../nlp/models/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5.bz2"
     print(f"Loading model from \"{fp}\" ...")
     model = gensim.models.KeyedVectors.load_word2vec_format(fp, binary=False)
     print("Model loaded.")

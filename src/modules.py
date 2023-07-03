@@ -1,4 +1,7 @@
-"""存放一些独立的功能模块
+"""
+存放一些独立的功能模块
+
+除loadfiles外，不要从src引入其他模块。
 
 模块1：统计不安全事件统计表中有各标签的数量。
 """
@@ -18,7 +21,7 @@ def init_tokenizer(*args):
 
 def count_labels():
     """统计（多标签）不安全事件统计表中各标签的数量。"""
-    load_pickle("out/dump/guanzhi_sep_vec_each_1350_select.pkl")
+    df = load_pickle("out/dump/guanzhi_bert_2941.pkl")
     df_v = df.value_counts('label')
     for i in range(2, 6):
         t = df.value_counts(f'label{i}')
