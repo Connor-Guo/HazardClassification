@@ -281,7 +281,7 @@ def split_df_on_label(df, train_size=.8, test_size=None, shuffle=True, random_st
         df_train = pd.concat((df_train, df_1))
         df_test = pd.concat((df_test, df_2))
 
-    print("Splitting complete.")
+    print("Split complete.")
     print(f"Training set size: {len(df_train)}.")
     print(f"Test set size: {len(df_test)}.")
     return df_train, df_test
