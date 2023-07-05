@@ -10,18 +10,15 @@ from src.modules import split_df_on_label
 
 
 if __name__ == "__main__":
-    EXP_NAME = "guanzhi_bert_2941"
-    df = load_data("../data/1-管制专业不安全事件匹配结果.xlsx")  # 读取数据库
+    EXP_NAME = "guanzhi_fix_bert_2941"
+    df = load_data("../data/1-管制专业不安全事件匹配结果-fix.xlsx")  # 读取数据库
 
     # 乱码表
     loader = Loader()
     gibberish = loader.load_gibberish('../nlp/gibberish.txt')
 
     # 读取标签
-    label_dict = {}
-    for l in [line.strip() for line in open("../data/label-guanzhi.txt", encoding='UTF-8').readlines()]:
-        v, k = l.split('\t')  # 1	跑道侵入
-        label_dict[k] = int(v)
+    label_dict = loader.load_label_dict("../data/label-guanzhi.txt")
 
     # 预处理
     df = preprocess_bert_df(df, label_dict=label_dict, gibberish=gibberish)

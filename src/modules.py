@@ -10,7 +10,7 @@ import warnings
 import pandas as pd
 import numpy as np
 import jieba
-from src.loadfiles import load_data, load_pickle, save_pickle
+from src.loadfiles import load_pickle, save_pickle
 
 
 def init_tokenizer(*args):
@@ -19,9 +19,9 @@ def init_tokenizer(*args):
     tk.load_userdict(r'./nlp/atc_terms.txt')  # 读取自定义词典
 
 
-def count_labels():
+def count_labels(df: pd.DataFrame):
     """统计（多标签）不安全事件统计表中各标签的数量。"""
-    df = load_pickle("out/dump/guanzhi_bert_2941.pkl")
+    # df = load_pickle("out/dump/guanzhi_bert_2941.pkl")
     df_v = df.value_counts('label')
     for i in range(2, 6):
         t = df.value_counts(f'label{i}')

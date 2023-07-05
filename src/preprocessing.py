@@ -135,22 +135,62 @@ def preprocess_bert_df(df: pd.DataFrame, *args, **kwargs):
     df_new["后果"] = df["后果"]
     # 上标签
     if label_dict:
-        def gl(s):  # get label from string
+        labels_cols = ['label', 'label2', 'label3', 'label4', 'label5']
+        chinese_labels_cols = ['不安全事件', '不安全事件2', '不安全事件3', '不安全事件4', '不安全事件5']
+
+        def _gl(s):  # get label from string
             if pd.isna(s):
                 return np.nan
             else:
                 return label_dict[s]
 
-        df_new["不安全事件"] = df["不安全事件"]
-        df_new["label"] = df["不安全事件"].apply(gl)
-        for i in range(2, 6):
-            df_new[f"不安全事件{i}"] = df[f"不安全事件{i}"]
-            df_new[f"label{i}"] = df[f"不安全事件{i}"].apply(gl)
+        for lbl_col, cn_col in zip(labels_cols, chinese_labels_cols):
+            df_new[cn_col] = df[cn_col]
+            df_new[lbl_col] = df[cn_col].apply(_gl)
+
+        # 检查标签是否递增
+        labels = df_new.loc[:, labels_cols].to_numpy()
+        _labels_ascending_check(labels)
 
     # 预处理过程
+    df_new.drop_duplicates(inplace=True)
+    print("[Preprocess] {} duplicated samples are dropped.".format(len(df) - len(df_new)))
     if gibberish:
         df_new["后果"] = df["后果"].apply(_denoise, args=(gibberish, ))
+    print("[Preprocess] Gibberish removed.")
     return df_new
+
+
+def _labels_ascending_check(labels: np.ndarray) -> None:
+    """检查每行的标签是否满足要求，空标签用np.nan表示"""
+    # labels = np.array([[1, 2, 3], [1, 2, np.nan], [1, np.nan, np.nan]])
+    # labels = np.array([[1, 2, 3], [np.nan, np.nan, np.nan], [1, np.nan, 3]])
+    # labels = np.array([[1, 2, 3], [1, 2, np.nan], [1, np.nan, 3]])
+    # labels = np.array([[1, 3, 2], [1, 1, np.nan], [1, 2, 3]])
+    error_flag = False
+    # 检查是否都有标签
+    if any(np.isnan(labels[:, 0])):
+        empty_lines = np.argwhere(np.isnan(labels[:, 0]))
+        print("[Preprocess] The following lines lacks a label: {}".format(empty_lines.ravel() + 1))
+        error_flag = True
+    # 检查标签是否连续，即两个标签之间不包含nan
+    continuous_arr = 1 - np.isnan(labels).astype(int)  # 将labels矩阵的所有nan变为0，数字变为1
+    continuous_arr = np.diff(continuous_arr)  # 逐列作差，如果有nan夹在两个数字之间，则该矩阵会出现数字1
+    fault_coords = np.argwhere(continuous_arr == 1)
+    if len(fault_coords) > 0:
+        print("[Preprocess] The following lines contain nan between two labels: {}".format(fault_coords[:, 0] + 1))
+        error_flag = True
+    # 检查标签是否单调增
+    # 后一列减前一列，如果是nan，则这列通过检查（已经到了最后一列标签）
+    # 如果大于0，通过，如果小于等于0，记录
+    ascending_arr = np.diff(labels)
+    descending_coords = np.argwhere(ascending_arr <= 0)
+    if len(descending_coords) > 0:
+        print("[Preprocess] The following lines do not ascend: {}".format(descending_coords[:, 0] + 1))
+        error_flag = True
+
+    if error_flag:
+        raise ValueError("The labels failed to pass labels ascending check. Please revise as suggested.")
 
 
 def to_corpus(df: pd.DataFrame, fp: str, encoding='utf-8'):
@@ -297,7 +337,6 @@ def _denoise(s: str, gibberish: list):
     """去除数据库中的标点符号乱码，例如'&ldquo'，以及分点的编号，例如'1.'。"""
     for gib in gibberish:
         s = s.replace(gib, '')
-        # s = re.sub(gib, '', s)
     return s
 
 

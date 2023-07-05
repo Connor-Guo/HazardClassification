@@ -13,7 +13,7 @@ import gensim.models
 
 
 class Loader(object):
-    def __init__(self):
+    def __init__(self) -> None:
         self.data = {}
 
     def _l(self, fp: str):
@@ -24,32 +24,42 @@ class Loader(object):
                 else:
                     yield line.strip()
 
-    def load(self, fp: str, name=None):
+    def load(self, fp: str, name=None) -> list:
         l = list(self._l(fp))
         if name:
             self.data[name] = l
         return l
 
-    def load_gibberish(self, fp: str):
-        l = self.load(fp)
-        l.extend(['\t', '\uf06c'])
-        self.data["gibberish"] = l
-        return l
-
-    def load_keys(self, fp: str):
-        """读取预训练模型的字典"""
-        # keys = [line.strip() for line in open(fp, encoding='utf8').readlines()]
-        l = self.load(fp)
-        self.data["word2vec_keys"] = l
-        return l
-
-    def load_abbr(self, fp: str):
+    def load_abbr(self, fp: str) -> dict:
         """读取缩写词的词典，返回{缩写词 -> 对应完整中文}"""
         df = pd.read_csv(fp, header=None).fillna('')
         keys = df.iloc[:, 0]
         values = df.iloc[:, 1]
         d = {k: v for k, v in zip(keys, values)}
         self.data["abbr_dict"] = d
+        return d
+
+    def load_gibberish(self, fp: str) -> list:
+        l = self.load(fp)
+        l.extend(['\t', '\uf06c'])
+        self.data["gibberish"] = l
+        return l
+
+    def load_keys(self, fp: str) -> list:
+        """读取预训练模型的字典"""
+        # keys = [line.strip() for line in open(fp, encoding='utf8').readlines()]
+        l = self.load(fp)
+        self.data["word2vec_keys"] = l
+        return l
+
+    def load_label_dict(self, fp: str) -> dict:
+        """{"跑道入侵" -> 1}"""
+        l = self.load(fp)
+        d = {}
+        for line in l:
+            v, k = line.split("\t")
+            d[k] = int(v)
+        self.data["label_dict"] = d
         return d
 
     def load_terms(self, fp):
@@ -86,12 +96,10 @@ class Loader(object):
         return sym_dict
 
 
-def load_data(fp: Optional[str] = None) -> pd.DataFrame:
-    if fp is None:
-        fp = "../data/1-管制专业不安全事件匹配结果.xlsx"
+def load_data(fp: str) -> pd.DataFrame:
     df = pd.read_excel(fp, sheet_name="不安全事件匹配结果", header=1)
-    df.drop_duplicates(inplace=True)
-    df.drop_duplicates(subset=["危险源编号"], inplace=True)  # 删除重复行和重复危险源编号（删除重复行后还有38条）
+    # df.drop_duplicates(inplace=True)
+    # df.drop_duplicates(subset=["危险源编号"], inplace=True)  # 删除重复行和重复危险源编号（删除重复行后还有38条）
     return df
 
 
@@ -139,5 +147,7 @@ def load_pickle(fp, *args):
 
 
 if __name__ == '__main__':
+    loader = Loader()
+    label_dict = loader.load_label_dict("../data/label-guanzhi.txt")
     pass
 
