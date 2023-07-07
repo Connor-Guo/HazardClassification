@@ -126,6 +126,7 @@ def preprocess_bert_df(df: pd.DataFrame, *args, **kwargs):
             乱码列表。
     """
     gibberish = kwargs.get("gibberish")
+    abbr_dict = kwargs.get("abbr_dict")
     label_dict = kwargs.get("label_dict")
 
     df_new = pd.DataFrame(columns=["危险源编号", "后果原文", "后果", "不安全事件", "不安全事件2", "不安全事件3",
@@ -156,8 +157,11 @@ def preprocess_bert_df(df: pd.DataFrame, *args, **kwargs):
     df_new.drop_duplicates(inplace=True)
     print("[Preprocess] {} duplicated samples are dropped.".format(len(df) - len(df_new)))
     if gibberish:
-        df_new["后果"] = df["后果"].apply(_denoise, args=(gibberish, ))
-    print("[Preprocess] Gibberish removed.")
+        df_new["后果"] = df_new["后果"].apply(_denoise, args=(gibberish, ))
+        print("[Preprocess] Gibberish removed.")
+    if abbr_dict:
+        df_new["后果"] = df_new["后果"].apply(_replace_k_with_v, args=(abbr_dict, ))
+        print("[Preprocess] Abbreviations replaced.")
     return df_new
 
 
@@ -333,19 +337,35 @@ def _del_english(s: str) -> str:
     return str(s)
 
 
-def _denoise(s: str, gibberish: list):
+def _denoise(
+    s: str,
+    gibberish: list
+) -> str:
     """去除数据库中的标点符号乱码，例如'&ldquo'，以及分点的编号，例如'1.'。"""
     for gib in gibberish:
         s = s.replace(gib, '')
     return s
 
 
-def _cut_sentence(s: str,
-                  stopwords: list = None,
-                  tokenizer: jieba.Tokenizer = None,
-                  keep_stopwords: bool = False,
-                  *args,
-                  **kwargs):
+def _replace_k_with_v(
+    s: str,
+    d: dict,
+) -> str:
+    """将字符串s按照字典d进行翻译，将s中的key替换为value。
+    字典d的key和value在替换时将被视为字符串"""
+    for k, v in d.items():
+        s = s.replace(str(k), str(v))
+    return s
+
+
+def _cut_sentence(
+    s: str,
+    stopwords: list = None,
+    tokenizer: jieba.Tokenizer = None,
+    keep_stopwords: bool = False,
+    *args,
+    **kwargs
+) -> list:
     """利用结巴分词将句子拆解为词语，再删除停用词和多余空格，最后仅保留重要词语。
 
     词库为哈工大停用词库。

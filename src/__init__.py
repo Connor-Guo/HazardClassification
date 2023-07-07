@@ -29,9 +29,9 @@ evaluate
     用于评估模型分类效果的模块
 
 """
-import src.loadfiles as loadfiles
-
-load_pickle = loadfiles.load_pickle
-save_pickle = loadfiles.save_pickle
+# import src.loadfiles as loadfiles
+#
+# load_pickle = loadfiles.load_pickle
+# save_pickle = loadfiles.save_pickle
 
 

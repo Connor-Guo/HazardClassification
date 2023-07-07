@@ -135,14 +135,19 @@ def _del_labels(
     >>> labels_cols = ['label1', 'label2']
     >>> chinese_labels_cols = ['text1', 'text2']
     >>> _del_labels(data, labels_to_del, labels_cols, chinese_labels_cols, fill_labels=False)
+           label1  label2 text1 text2
+    0       1     2.0     A     B
+    1       2     0.0     B   NaN
+    2       1     0.0     A   NaN
     """
     # 数据类型转换
     if not isinstance(labels_to_del, np.ndarray):
         labels_to_del = np.array(labels_to_del)
 
-    # 仅删除{待删除标签}中的标签
+    # 删除{待删除标签}中的标签
+    data_new = deepcopy(data)
     for label_to_del in labels_to_del.astype(int):
-        data_new = _del_single_label(data, label_to_del, labels_cols, chinese_labels_cols)
+        data_new = _del_single_label(data_new, label_to_del, labels_cols, chinese_labels_cols)
 
     if fill_labels:
         labels = data_new[labels_cols].to_numpy()
@@ -188,11 +193,10 @@ def _del_single_label(
     >>> labels_cols = ['label1', 'label2']
     >>> chinese_labels_cols = ['text1', 'text2']
     >>> _del_single_label(data, label_to_del, labels_cols, chinese_labels_cols)
-           label1  label2 text1 text2
-    0     1.0     2.0     A     B
-    1     2.0     NaN     B   NaN
-    2     1.0     NaN     A   NaN
-    3     3.0     NaN     C   NaN
+       label1  label2 text1 text2
+    0       1     2.0     A     B
+    1       2     0.0     B   NaN
+    2       1     0.0     A   NaN
     """
     data_copy = deepcopy(data)
 
@@ -217,12 +221,15 @@ def _del_single_label(
                     if chinese_labels_cols is not None:
                         chinese[start:-1] = chinese[start + 1:]
                         chinese[-1] = np.nan
+                # 4将labels的0.0全部换为np.nan
+                labels = np.where(labels, labels, np.nan)
                 # 执行操作，替换data_copy
                 data_copy.loc[idx, labels_cols] = labels
                 if chinese_labels_cols is not None:
                     data_copy.loc[idx, chinese_labels_cols] = chinese
         else:  # 1b如果这行不用操作
             pass
+
     return data_copy
 
 
@@ -235,7 +242,7 @@ def _fill_labels(
 
     Examples
     --------
-        >>> labels = np.array([[1, 3], [1, 5]])  # label 2,4 is absent
+        >>> labels = np.array([[1, 3, 0], [1, 5, 6]])  # labels 2,4 are absent
         >>> labels_to_del = np.array([2, 4])
         >>> _fill_labels(labels, labels_to_del)
         array([[1, 2],
