@@ -10,6 +10,8 @@ if __name__ == "__main__":
 
     # 重采样
     resampler = Resampler(df,
+                          id_col="危险源编号",
+                          text_col="后果",
                           labels_cols=['label', 'label2', 'label3', 'label4', 'label5'],
                           chinese_labels_cols=['不安全事件', '不安全事件2', '不安全事件3', '不安全事件4', '不安全事件5'],
                           )

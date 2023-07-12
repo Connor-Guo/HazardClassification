@@ -41,7 +41,7 @@ class Loader(object):
 
     def load_gibberish(self, fp: str) -> list:
         l = self.load(fp)
-        l.extend(['\t', '\uf06c'])
+        l.extend(['\n', '\t', '\uf06c', ' ', ' '])  # 后两个分别是英文空格、中文空格
         self.data["gibberish"] = l
         return l
 

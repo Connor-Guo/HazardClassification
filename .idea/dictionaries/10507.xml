@@ -2,6 +2,7 @@
   <dictionary name="10507">
     <words>
       <w>denoise</w>
+      <w>oversample</w>
       <w>subterm</w>
       <w>vectorizer</w>
     </words>

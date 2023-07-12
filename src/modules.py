@@ -19,14 +19,17 @@ def init_tokenizer(*args):
     tk.load_userdict(r'./nlp/atc_terms.txt')  # 读取自定义词典
 
 
-def count_labels(df: pd.DataFrame):
+def count_labels(df: pd.DataFrame, save=False):
     """统计（多标签）不安全事件统计表中各标签的数量。"""
     # df = load_pickle("out/dump/guanzhi_bert_2941.pkl")
     df_v = df.value_counts('label')
     for i in range(2, 6):
         t = df.value_counts(f'label{i}')
         df_v = df_v.add(t, fill_value=0).astype(int)
-    df_v.to_csv('./out/dump/样本统计.csv')
+    if save:
+        df_v.to_csv('./out/dump/样本统计.csv')
+
+    return df_v
 
 
 def _1col_300col(df):

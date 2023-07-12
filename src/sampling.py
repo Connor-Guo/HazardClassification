@@ -3,12 +3,20 @@
 
 (UNFINISHED)
 """
+import os.path
 # from __future__ import annotations
+
+from typing import TypeVar, Tuple, List
+from copy import deepcopy
+import json
+from time import sleep
 
 import pandas as pd
 import numpy as np
-from typing import TypeVar, Tuple, List
-from copy import deepcopy
+import openai
+
+from src.loadfiles import *
+
 
 ResamplerT = TypeVar('ResamplerT', bound='Resampler')
 
@@ -17,6 +25,8 @@ class Resampler:
     def __init__(
         self,
         data: pd.DataFrame,
+        id_col: str,
+        text_col: str,
         labels_cols: List[str],
         chinese_labels_cols: List[str] = None,
     ) -> None:
@@ -30,6 +40,9 @@ class Resampler:
 
         self.data_original = data
         self.data_resampled = None
+        self.data_generated = None
+        self.id_col = id_col
+        self.text_col = text_col
         self.labels_cols = labels_cols
         self.chinese_labels_cols = chinese_labels_cols
 
@@ -56,6 +69,46 @@ class Resampler:
             raise TypeError(f"Type of argument \"labels_to_del\" should be list or np.ndarray, but {type(labels_to_del)} is provided.")
         self.data_resampled = _del_labels(self.data_original, labels_to_del, self.labels_cols, self.chinese_labels_cols, fill_labels=True)
         return self.data_resampled
+
+    def generate_with_gpt(
+        self,
+        label: int,
+        prompt_str: str,
+        expected_n: int,
+        save_folder: str,
+        lb_text_len: int = 12,
+        shuffle: bool = True,
+        random_state: int = 42,
+    ):
+        """
+        采用"gpt-3.5-turbo"对一个标签进行过采样。
+        保存采样记录至`{label}-log.xlsx`，缓存至`cache.pkl`，返回采样结果。
+
+        Parameters
+        ----------
+        label : 待采样的标签
+        prompt_str : 提示词的字符串，包含两个参数，分别是`n_paraphrase`和`narrative`
+        expected_n : 标签的期待样本个数
+            如果该数量小于等于已有样本数量，则不会进行采样。返回一个空DataFrame，且不保存log
+            否则会持续采样，直到已有样本数量大于等于期待样本数量。
+        save_folder : 输出记录文件的路径
+            记录文件为excel文件，
+        lb_text_len : 采样需要的最小文本长度。低于该长度的样本不会被传给ChatGPT采样
+        shuffle : 采样时是否打乱输入
+        random_state : 随机数种子
+
+        Returns
+        -------
+        pd.DataFrame
+            返回修改了危险源编号、paraphrase字符串及其标签的Dataframe，其中危险源编号为"样本编号-para-i"
+            返回值中不包含原有样本
+        """
+        assert lb_text_len > 0
+
+        self.data_generated = _oversample_label_gpt35(self.data_original, self.id_col, self.text_col, self.labels_cols,
+                                                      label, prompt_str, expected_n, save_folder, lb_text_len,
+                                                      shuffle, random_state)
+        return self.data_generated
 
 
 def _resample(
@@ -150,10 +203,18 @@ def _del_labels(
         data_new = _del_single_label(data_new, label_to_del, labels_cols, chinese_labels_cols)
 
     if fill_labels:
-        labels = data_new[labels_cols].to_numpy()
+        # labels = data_new[labels_cols].to_numpy()
+        labels = _get_labels_from_df(data_new, labels_cols)
         filled_labels = _fill_labels(labels, labels_to_del)
         data_new.loc[:, labels_cols] = filled_labels
     return data_new
+
+
+def _get_labels_from_df(
+    df: pd.DataFrame,
+    labels_cols: List[str],
+) -> np.ndarray:
+    return df[labels_cols].to_numpy()
 
 
 def _del_single_label(
@@ -262,6 +323,143 @@ def _fill_labels(
                 if filled_labels[i, j] > label:
                     filled_labels[i, j] = filled_labels[i, j] - 1
     return filled_labels
+
+
+def get_completion(prompt: str, model="gpt-3.5-turbo") -> str:
+    messages = [{"role": "user", "content": prompt}]
+    response = openai.ChatCompletion.create(
+               model=model,
+               messages=messages,
+               temperature=0,  # this is the degree of randomness of the model ’s output
+               )
+    return response.choices[0].message["content"]
+
+
+def _json_2_dict(s: str):
+    """input string should be the output of `get_completion`"""
+    return json.loads(s)
+
+
+def _get_response_list(
+    prompt: str,
+    *,
+    tries: int = 0,
+) -> List[str]:
+    if tries > 2:  # 最大重试次数
+        print("Retry failed. This sample is skipped.")
+        return []
+    try:
+        response = get_completion(prompt)
+        lst = _json_2_dict(response)["Paraphrase"]
+    except openai.error.OpenAIError as e:
+        print(e, "Retrying...")
+        sleep(12)
+        lst = _get_response_list(prompt, tries=tries+1)
+    except Exception as ee:
+        return []
+    return lst
+
+
+def _oversample_label_gpt35(
+    df: pd.DataFrame,
+    id_column: str,
+    text_column: str,
+    labels_cols: List[str],
+    label: int,
+    prompt_str: str,
+    expected_n: int,
+    save_folder: str,
+    lb_text_len: int,
+    shuffle: bool,
+    random_state: int,
+) -> pd.DataFrame:
+    """
+    采用"gpt-3.5-turbo"对一个标签进行过采样。
+    保存采样记录至`{label}-log.xlsx`，缓存至`cache.pkl`，返回采样结果。
+
+    Parameters
+    ----------
+    df : 包含所有标签的样本的DataFrame
+    id_column : 危险源编号的列名
+    text_column : 待采样文本的列名
+    labels_cols : 标签的列名
+    label : 待采样的标签
+    prompt_str : 提示词的字符串，包含两个参数，分别是`n_paraphrase`和`narrative`
+    expected_n : 标签的期待样本个数
+        如果该数量小于等于已有样本数量，则不会进行采样。返回一个空DataFrame，且不保存log
+        否则会持续采样，直到已有样本数量大于等于期待样本数量。
+    save_folder : 输出记录文件的路径
+        记录文件为excel文件，
+    lb_text_len : 采样需要的最小文本长度。低于该长度的样本不会被传给ChatGPT采样
+    shuffle : 采样时是否打乱输入
+    random_state : 随机数种子
+
+    Returns
+    -------
+    pd.DataFrame
+        返回修改了危险源编号、paraphrase字符串及其标签的Dataframe，其中危险源编号为"样本编号-para-i"
+        返回值中不包含原有样本
+    """
+    # log目录和缓存目录
+    log_path = os.path.join(save_folder, f"{label}-log.xlsx")
+    cache_path = os.path.join(save_folder, "cache.pkl")
+
+    # 从输入的df里拿到所有包含label的行
+    labels = _get_labels_from_df(df, labels_cols)
+    contain_idx = np.where(label == labels)[0]
+    df_label = deepcopy(df).iloc[contain_idx, :]
+    # 删除重复和过短的行
+    df_label.drop(index=df_label.index[df_label[text_column].duplicated()], inplace=True)
+    llb_idx = df_label[text_column].apply(lambda s: True if len(s) < lb_text_len else False)  # 过短为True
+    df_label.drop(index=llb_idx.index[llb_idx], inplace=True)
+    # 根据当前已有样本数和采样后预期样本总数，计算每个样本需要被采样几次
+    n_samples = len(df_label)
+    print(f"[Sampling] Label {label} has {n_samples} samples. It is expected to be resampled to {expected_n}.")
+    if expected_n <= n_samples:
+        print(f"[Sampling] Label {label} need not to be generated.")
+        return pd.DataFrame()
+    n_paraphrase = np.ceil(expected_n / n_samples)
+    # 根据计算的样本数量，调用函数进行采样
+    resample_log_lst = []
+    resample_df = pd.DataFrame(columns=df.columns)
+    # 打乱样本顺序
+    if shuffle:
+        df_label.sample(frac=1, random_state=random_state)
+    # 采样
+    for idx, line in df_label.iterrows():
+        hae_id = line[id_column]
+        narrative = line[text_column]
+        prompt = prompt_str.format(int(n_paraphrase), narrative)
+        r_lst = _get_response_list(prompt)
+        # 存储log和结果
+        for i, para in enumerate(r_lst):
+            para_id = f"{hae_id}-para-{i+1}"
+            # 写log
+            resample_log_lst.append(
+                {
+                    "hae_id": hae_id,
+                    "para_id": para_id,
+                    "narrative": narrative,
+                    "paraphrase": para,
+                }
+            )
+            # 写结果
+            new_line = deepcopy(line)
+            new_line[id_column] = para_id
+            new_line[text_column] = para
+            resample_df.loc[len(resample_df)] = new_line
+        # 每次得到数据后缓存
+        save_pickle(resample_df, cache_path)
+        print(f"[Sampling] {len(resample_df)} samples acquired. {max(0, expected_n - len(resample_df) - len(df_label))} left.")
+        # 判断是否结束
+        if len(resample_df) + len(df_label) >= expected_n:
+            print(f"[Sampling] Label {label} resampled to {len(resample_df) + len(df_label)} samples.")
+            break
+    # 存log
+    pd.DataFrame(resample_log_lst).to_excel(log_path, index=False)
+    # 返回修改了危险源编号、paraphrase字符串及其标签的Dataframe，其中危险源编号为"{样本编号}-para-{i}"
+    # 返回值中不包含原有样本
+    return resample_df
 
 
 if __name__ == "__main__":
