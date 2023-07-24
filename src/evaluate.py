@@ -53,6 +53,7 @@ MultiLabelEvaluator
     from sklearn.metrics
 """
 import pandas as pd
+import torch
 from sklearn.metrics import (
         accuracy_score,
         balanced_accuracy_score,
@@ -66,19 +67,23 @@ from sklearn.metrics import (
         hamming_loss,
 )
 from imblearn.metrics import classification_report_imbalanced
+from torcheval.metrics.functional.classification.accuracy import topk_multilabel_accuracy
 import numpy as np
 import time
 import os
 import matplotlib.pyplot as plt
 from collections import Iterable
-from typing import List
+from typing import Union, Sequence
 
 
 class Evaluator:
-    def __init__(self,
-                 y_true,
-                 y_pred,
-                 exp_name=None):
+    def __init__(
+        self,
+        y_true,
+        y_pred,
+        exp_name=None,
+        **kwargs,
+    ):
         if exp_name:
             self.name = "eval_" + str(exp_name)
         else:
@@ -92,20 +97,22 @@ class Evaluator:
 
         self.y_true = y_true
         self.y_pred = y_pred
-        self.scores = PerfDict()
+        self.kwargs = kwargs
+        self.n_labels = y_true.max() - y_true.min()
+        self.scores = _PerfDict()
         self._scores = {}
         self.figs = {}
 
-    def _accuracy(self):
+    def accuracy(self):
         return accuracy_score(self.y_true, self.y_pred)
 
-    def _balanced_accuracy(self):
+    def balanced_accuracy(self):
         return balanced_accuracy_score(self.y_true, self.y_pred)
 
-    def _confusion_mat(self):
+    def confusion_mat(self):
         return confusion_matrix(self.y_true, self.y_pred)
 
-    def _plot_confusion_mat(self):
+    def plot_confusion_mat(self):
         C = self._confusion_mat()
         fig, ax = plt.subplots()
 
@@ -126,7 +133,7 @@ class Evaluator:
         # plt.yticks(range(0,5), labels=['a','b','c','d','e'])
         return fig
 
-    def _cls_report(self, imbalanced=True, output_dict=False):
+    def cls_report(self, imbalanced=False, output_dict=False):
         if imbalanced:
             return classification_report_imbalanced(self.y_true, self.y_pred, output_dict=output_dict)
         else:
@@ -190,22 +197,22 @@ class Evaluator:
     #     plt.legend(loc="lower right")
     #     plt.show()
 
-    def _cohen_kappa_score(self):
+    def cohen_kappa_score(self):
         return cohen_kappa_score(self.y_true, self.y_pred)
 
-    def _matthews_corrcoef(self):
+    def matthews_corrcoef(self):
         return matthews_corrcoef(self.y_true, self.y_pred)
 
     def evaluate(self, show_fig=False):
-        self.scores["accuracy"] = self._accuracy()
-        self.scores["balanced accuracy"] = self._balanced_accuracy()
-        self.scores["confusion matrix"] = self._confusion_mat()
-        self.scores["classification report"] = self._cls_report()
-        self._scores["classification report dict"] = self._cls_report(output_dict=True)
+        self.scores["accuracy"] = self.accuracy()
+        self.scores["balanced accuracy"] = self.balanced_accuracy()
+        self.scores["confusion matrix"] = self.confusion_mat()
+        self.scores["classification report"] = self.cls_report()
+        self._scores["classification report dict"] = self.cls_report(output_dict=True)
         # self.scores["roc auc score"] = self._auroc()
-        self.scores["cohen kappa score"] = self._cohen_kappa_score()
-        self.scores["matthews correlation coefficient"] = self._matthews_corrcoef()
-        self.figs["confusion matrix"] = self._plot_confusion_mat()
+        self.scores["cohen kappa score"] = self.cohen_kappa_score()
+        self.scores["matthews correlation coefficient"] = self.matthews_corrcoef()
+        self.figs["confusion matrix"] = self.plot_confusion_mat()
         # self.figs["auc roc curves"] = self._plot_auroc()
         if show_fig:
             for fig in self.figs.values():
@@ -256,36 +263,36 @@ class Evaluator:
 
 class MultiLabelEvaluator(Evaluator):
     """还可以加入macro的PRF1"""
-    def __init__(self, y_true, y_pred, exp_name=None):
-        super(MultiLabelEvaluator, self).__init__(y_true, y_pred, exp_name)
+    def __init__(self, y_true, y_pred, exp_name=None, **kwargs):
+        super(MultiLabelEvaluator, self).__init__(y_true, y_pred, exp_name, **kwargs)
         # 确保是multi label问题
         assert len(y_true.shape) == 2
         assert y_true.shape[1] > 1
 
-    def _balanced_accuracy(self):
+    def balanced_accuracy(self):
         """Invalid method for multilabel."""
         pass
 
-    def _confusion_mat(self):
+    def confusion_mat(self):
         """Invalid method for multilabel."""
         pass
 
-    def _plot_confusion_mat(self):
+    def plot_confusion_mat(self):
         """Invalid method for multilabel."""
         pass
 
-    def _cls_report(self, imbalanced=False, output_dict=False):
+    def cls_report(self, imbalanced=False, output_dict=False):
         """imblearn does not support multilabel"""
         return classification_report(self.y_true, self.y_pred, output_dict=output_dict)
 
-    def _hamming_loss(self):
+    def hamming_loss(self):
         return hamming_loss(self.y_true, self.y_pred)
 
     def evaluate(self, show_fig=False):
-        self.scores["accuracy"] = self._accuracy()
-        self.scores["classification report"] = self._cls_report()
-        self._scores["classification report dict"] = self._cls_report(imbalanced=False, output_dict=True)
-        self.scores["hamming_loss"] = self._hamming_loss()
+        self.scores["accuracy"] = self.accuracy()
+        self.scores["classification report"] = self.cls_report()
+        self._scores["classification report dict"] = self.cls_report(imbalanced=False, output_dict=True)
+        self.scores["hamming_loss"] = self.hamming_loss()
         return self.scores
 
     def save(self, path='./evaluation', modelname: str = None, savefig=True):
@@ -322,7 +329,69 @@ class MultiLabelEvaluator(Evaluator):
             self.savefig(path, fig_name)
 
 
-class PerfDict(dict):
+class MultiLabelProbEvaluator(Evaluator):
+    def __init__(
+        self,
+        y_true: Union[torch.Tensor, np.ndarray],
+        y_pred: Union[torch.Tensor, np.ndarray],  # 是prob，真正的pred是pred2
+        exp_name: str = None,
+        **kwargs,
+    ) -> None:
+        super(MultiLabelProbEvaluator, self).__init__(y_true, y_pred, exp_name, **kwargs)
+        assert isinstance(y_true, (torch.Tensor, np.ndarray))
+        assert isinstance(y_pred, (torch.Tensor, np.ndarray))
+        if isinstance(y_true, torch.Tensor):
+            self.y_true = np.array(y_true)
+        if isinstance(y_pred, torch.Tensor):
+            self.y_pred = np.array(y_pred)
+
+        self.threshold = kwargs.get("threshold")
+        if self.threshold:
+            self.y_pred2 = self._prob_2_pred()  # 计算预测的标签值
+            self.mleva = MultiLabelEvaluator(self.y_true, self.y_pred2, exp_name, **kwargs)
+
+    def top_k_accuracy(self, k: int = 5):
+        y_pred, y_true = torch.tensor(self.y_pred), torch.tensor(self.y_true)
+        perf = {
+            "contain": topk_multilabel_accuracy(y_pred, y_true, criteria='contain', k=k),
+            "overlap": topk_multilabel_accuracy(y_pred, y_true, criteria='overlap', k=k),
+            # "hamming": topk_multilabel_accuracy(self.y_pred, self.y_true, criteria='hamming', k=k),
+        }
+        return perf
+
+    def accuracy(self) -> float:
+        """Exact match accuracy. This is rather slow."""
+        return accuracy_score(self.y_true, self.y_pred2)
+
+    def hamming_loss(self):
+        return self.mleva.hamming_loss()
+
+    def cls_report(self, imbalanced=False, output_dict=False):
+        return self.mleva.cls_report(imbalanced, output_dict)
+
+    def evaluate(self, show_fig=False):
+        self.scores["accuracy"] = self.accuracy()
+        self.scores["top-k accuracy contain"] = self.top_k_accuracy(k=5)["contain"]
+        self.scores["top-k accuracy overlap"] = self.top_k_accuracy(k=5)["overlap"]
+        self.scores["classification report"] = self.cls_report()
+        self._scores["classification report dict"] = self.cls_report(output_dict=True)
+        self.scores["hamming_loss"] = self.hamming_loss()
+        return self.scores
+
+    def _prob_2_pred(self):
+        # if self.threshold is None:
+        #     raise AttributeError("Threshold for deciding labels unprovided.")
+        pred2 = (self.y_pred > self.threshold).astype(int)
+        return pred2
+
+    def _top_k(self, k):
+        y_pred = torch.tensor(self.y_pred)
+        top_p, top_class = torch.topk(y_pred, k, dim=1)
+        top_class = top_class + 1
+        return top_p, top_class
+
+
+class _PerfDict(dict):
     def __init__(self):
         super().__init__(self)
 
@@ -340,8 +409,8 @@ class PerfDict(dict):
 if __name__ == "__main__":
     df = pd.read_excel(r"C:\Users\10507\OneDrive\桌面\202301 危险源挖掘论文\不安全事件分类\code\out\result\result_guanzhi_sep_vec_each_1000_select.xlsx")
     y_test = df['label'].to_numpy()
-    y_pred = df['pred_label'].to_numpy()
-    eva = Evaluator(y_test, y_pred)
-    eva.evaluate()
-    eva.save("../evaluation", "SimilarityOnSelect")
+    # y_pred = df['pred_label'].to_numpy()
+    # eva = Evaluator(y_test, y_pred)
+    # eva.evaluate()
+    # eva.save("../evaluation", "SimilarityOnSelect")
 

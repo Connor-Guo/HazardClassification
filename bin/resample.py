@@ -1,3 +1,7 @@
+"""
+删除某些标签。
+"""
+
 import os
 from src.loadfiles import *
 from src.sampling import Resampler

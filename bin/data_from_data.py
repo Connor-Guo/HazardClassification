@@ -36,7 +36,7 @@ if __name__ == "__main__":
     save_pickle(df, f'../out/dump/{EXP_NAME}/{EXP_NAME}.pkl')
 
     # 数据集划分
-    df_train, df_test = split_df_on_label(df)
+    df_train, df_test = split_df_on_label(df, n_labels=21)
     if not os.path.exists(f'../out/datasets/{EXP_NAME}/'):
         os.makedirs(f'../out/datasets/{EXP_NAME}/')
     df_train.to_excel(f"../out/datasets/{EXP_NAME}/{EXP_NAME}-train.xlsx", index=False)

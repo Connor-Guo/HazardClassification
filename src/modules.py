@@ -256,7 +256,7 @@ def regularize_data_alt():
     df_new.to_excel("../data/管制-多比一-未剔除其他标签.xlsx", index=False)
 
 
-def split_df_on_label(df, train_size=.8, test_size=None, shuffle=True, random_state=42):
+def split_df_on_label(df, n_labels, train_size=.8, test_size=None, shuffle=True, random_state=42):
     """
     Split the dataframe in proportion to label.
 
@@ -266,11 +266,12 @@ def split_df_on_label(df, train_size=.8, test_size=None, shuffle=True, random_st
     Notes
     -----
     Label "Other events" are thrown.
+    Label larger than `n_labels` but exist in df are thrown.
     """
     if shuffle:
         df = df.sample(frac=1, random_state=random_state)
 
-    l_label = list(range(1, 19))
+    l_label = list(range(1, n_labels + 1))
     df_train = pd.DataFrame()
     df_test = pd.DataFrame()
     for lbl in l_label:

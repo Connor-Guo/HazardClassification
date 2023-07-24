@@ -12,7 +12,7 @@ if __name__ == "__main__":
     df = load_pickle(f"../out/resample/{EXP_NAME}/{EXP_NAME}.pkl")  # 读取数据库
 
     # 数据集划分
-    df_train, df_test = split_df_on_label(df, train_size=.8)
+    df_train, df_test = split_df_on_label(df, n_labels=14, train_size=.8)
     if not os.path.exists(f'../out/datasets/{EXP_NAME}/'):
         os.makedirs(f'../out/datasets/{EXP_NAME}/')
     df_train.to_excel(f"../out/datasets/{EXP_NAME}/{EXP_NAME}-train.xlsx", index=False)

@@ -1,9 +1,3 @@
-import os
-import openai
-import pandas as pd
-
-from src.loadfiles import *
-from src.sampling import *
 """
 利用ChatGPT3.5生成数据。
 仅针对训练集生成。
@@ -13,20 +7,28 @@ from src.sampling import *
 后者会被复制一份到`../out/dataset/{EXP_NAME}/`文件夹下。
 
 """
+import os
+
+import openai
+import pandas as pd
+
+from src.loadfiles import *
+from src.sampling import *
+
 
 if __name__ == "__main__":
     # 参数设置
     EXP_NAME = "guanzhi_fix_bert_abbr_2941"
-    SAVE_NAME = "guanzhi_fix_bert_abbr_2941_GPT"
+    SAVE_NAME = "guanzhi_fix_bert_abbr_2941_GPT_3"
     save_folder = f"../out/ChatGPT/{SAVE_NAME}/"
-    dataset_folder = f"../out/dataset/{SAVE_NAME}"
+    dataset_folder = f"../out/datasets/{SAVE_NAME}"
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
 
-    openai.api_key = "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"
-    prompt_str = """
+    openai.api_key = input("OpenAI API key:")
+    prompt_fmt = """
     你是一名空中交通管理专家。
 
     你可以将这段事件描述用其他方式转述出来吗？请提供{}种转述。请确保转述中包含所有重要的细节，例如潜在的后果、系统的名称、以及其他相关的专业名词或缩写。请用中文转述。
@@ -41,13 +43,20 @@ if __name__ == "__main__":
     r_dict = {
         1: 150,
         5: 150,
+        6: 20,
+        7: 50,
         8: 150,
         9: 150,
         10: 150,
+        12: 20,
         13: 200,
         14: 150,
+        15: 30,
+        16: 50,
         17: 150,
+        18: 50,
         19: 200,
+        20: 50,
         21: 200,
     }  # 标签对应的采样目标数量
 
@@ -60,24 +69,31 @@ if __name__ == "__main__":
                                                '不安全事件5'],
                           )
 
-    # df_new = pd.DataFrame(columns=df.columns)
+    # 开始生成数据
     lst_df_generated = []
-    for label, n_paraphrase in r_dict.items():
-        df_generated = resampler.generate_with_gpt(
-            label=label,
-            prompt_str=prompt_str,
-            expected_n=n_paraphrase,
-            save_folder=save_folder,
-            lb_text_len=8,
-        )
-        dataset_path_1 = os.path.join(save_folder, f"{label}.xlsx")
-        df_generated.to_excel(dataset_path_1, index=False)
-        lst_df_generated.append(df_generated)
+    # for label, expected_n in r_dict.items():
+    #     df_generated = resampler.generate_with_gpt_2(
+    #         label=label,
+    #         prompt_fmt=prompt_fmt,
+    #         expected_n=expected_n,
+    #         save_folder=save_folder,
+    #         lb_text_len=8,
+    #         load=True,
+    #     )
+    #     # 对每个标签保存一个文件
+    #     dataset_path_1 = os.path.join(save_folder, f"{label}.xlsx")
+    #     df_generated.to_excel(dataset_path_1, index=False)
+    #     lst_df_generated.append(df_generated)
 
     # 保存合并后的文件
-    df_generated_all = pd.concat(lst_df_generated)
+    if len(lst_df_generated) != len(r_dict):
+        for label in list(r_dict.keys()):
+            dataset_path_1 = os.path.join(save_folder, f"{label}.xlsx")
+            lst_df_generated.append(pd.read_excel(dataset_path_1))
+        df_generated_all = pd.concat(lst_df_generated)
+
     df_all = pd.concat((df, df_generated_all)).sort_values(by="label", ascending=True)
     df_generated_all.to_excel(os.path.join(save_folder, "generated_all.xlsx"), index=False)
     df_all.to_excel(os.path.join(save_folder, f"{SAVE_NAME}-train.xlsx"), index=False)
-    save_pickle(df_all, os.path.join(dataset_folder, f"{SAVE_NAME}-train.xlsx"))
+    save_pickle(df_all, os.path.join(dataset_folder, f"{SAVE_NAME}-train.pkl"))
     df_all.to_excel(os.path.join(dataset_folder, f"{SAVE_NAME}-train.xlsx"), index=False)

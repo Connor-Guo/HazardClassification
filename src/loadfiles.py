@@ -135,12 +135,12 @@ def load_pretrained(fp: str = None):
     # print(wv.most_similar(positive=['人员'], topn=20))
 
 
-def save_pickle(obj, fp, *args):
+def save_pickle(obj, fp):
     with open(fp, 'wb') as tf:
         pickle.dump(obj, tf)
 
 
-def load_pickle(fp, *args):
+def load_pickle(fp):
     with open(fp, 'rb') as tf:
         obj = pickle.load(tf)
     return obj
